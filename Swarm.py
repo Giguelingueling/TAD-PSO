@@ -3,12 +3,14 @@ from Creature import Creature
 import numpy as np
 
 class Swarm(object):
-    def __init__(self, random, upper_bound, lower_bound, number_of_creatures):
+    def __init__(self, random, upper_bound, lower_bound, number_of_creatures_main_population,
+                 number_of_creatures_auxiliary_population):
         self._upper_bound = upper_bound
         self._lower_bound = lower_bound
         self._number_dimensions = len(self._upper_bound)
         self._random = random
-        self._number_of_creatures = number_of_creatures
+        self._number_of_creatures_main_population = number_of_creatures_main_population
+        self._number_of_creatures_auxiliary_population = number_of_creatures_auxiliary_population
 
         self._array_creatures = self.create_creatures()
         self._array_index_creatures_to_ignore = []
@@ -16,7 +18,7 @@ class Swarm(object):
         self._OA = self.generate_OA()
 
         # Examplar is a list of creatures index of length number of dimensions. If the index of creature 4 appear at
-        # position 9 for example. This the creature will use the value of the best memory of creature 4 for the
+        # position 9 for example. This creature will use the value of the best memory of creature 4 for the
         # position 9
         self._list_examplar_index = self.initialize_examplars()
 
@@ -25,7 +27,7 @@ class Swarm(object):
 
     def create_creatures(self):
         array_creatures = []
-        for i in range(self._number_of_creatures):
+        for i in range(self._number_of_creatures_main_population + self._number_of_creatures_auxiliary_population):
             array_creatures.append(Creature(random=self._random,
                                             upper_bound=self._upper_bound, lower_bound=self._lower_bound))
         return array_creatures
@@ -80,8 +82,6 @@ class Swarm(object):
             if nmbr_evals > max_evals:
                 break
             if current_gen % 9 == 0 and current_gen > 10:
-                avg_velocity = self.calculate_average_velocity()
-                #print "AVERAGE VELOCITY: ", avg_velocity
                 print "  BEST FITNESS: ", \
                       self.get_best_creature_ever().get_best_memory_fitness(), " Number of evaluations so far: ", \
                     nmbr_evals
@@ -92,10 +92,10 @@ class Swarm(object):
     def update_swarm(self, current_number_evaluations, max_evals, fitness_function, use_fast_convergence_pso=False):
         # Check if we have to remove a creature from the orthogonal learning paradigm:
         if (current_number_evaluations > ((len(self._array_index_creatures_to_ignore) + 1) * max_evals) / (
-                    self._number_of_creatures * .75) and len(self._array_index_creatures_to_ignore) <=
-                self._number_of_creatures * .76):
-            self.remove_creature(self._number_of_creatures*.75)
-            print self._array_index_creatures_to_ignore
+                    self._number_of_creatures_main_population) and len(self._array_index_creatures_to_ignore) <=
+                self._number_of_creatures_main_population+1):
+            self.deactivate_creature(self._number_of_creatures_main_population)
+            print "Array creatures desactivated : ", self._array_index_creatures_to_ignore
         total_evaluation = 0
         index = 0
         best_creature, best_creature_index = self.get_best_creature_ever(get_index=True)
@@ -104,12 +104,12 @@ class Swarm(object):
         for creature in self._array_creatures:
             if index not in self._array_index_creatures_to_ignore:
                 evals_to_give_creature = current_number_evaluations + total_evaluation
-                if index > self._number_of_creatures*.75:
+                if index > self._number_of_creatures_main_population:
                     use_fast_convergence_pso = True
                 # Check if the creature need a new examplar
                 if creature.need_new_examplar():
                     if use_fast_convergence_pso is False:
-                        total_evaluation += self.create_new_examplar(index, fitness_function)
+                        total_evaluation += self.create_new_examplar_main_population(index, fitness_function)
                         creature.new_examplar_created()
                 if use_fast_convergence_pso:
                     examplar_for_creature = np.copy(best_position)
@@ -127,20 +127,10 @@ class Swarm(object):
 
         return total_evaluation
 
-    def remove_creature(self, index_max):
+    def deactivate_creature(self, index_max):
         # Find the worst creature.
         worst_creature, worst_creature_index = self.get_worst_creature(index_max)
         self._array_index_creatures_to_ignore.append(worst_creature_index)
-
-    def calculate_average_velocity(self):
-        average_velocity = 0.
-
-        for creature in self._array_creatures:
-            velocity = creature.get_velocity()
-            mean_velocity = np.linalg.norm(velocity)/np.sqrt(self._number_dimensions)
-            average_velocity += mean_velocity
-        average_velocity /= len(self._array_creatures)
-        return average_velocity
 
     def get_examplar_from_array_of_creature_index(self, examplar_index):
         examplar = []
@@ -154,11 +144,6 @@ class Swarm(object):
     def get_current_examplar(self, creature_index):
         examplar_index = self._list_examplar_index[creature_index]
         return self.get_examplar_from_array_of_creature_index(examplar_index=examplar_index)
-
-    def get_index_connected_to_creature_index(self, index_creature):
-        index_connected = range(len(self._array_creatures))
-        index_connected.pop(index_creature)
-        return index_connected
 
     def get_other_vector_examplar(self, creature_index):
         examplar = np.zeros(self._number_dimensions)
@@ -183,15 +168,7 @@ class Swarm(object):
                 examplar[i] = index_creature_chosen[1]
         return examplar
 
-    def create_new_examplar_convergence(self, creature_index):
-        best_creature, best_creature_index = self.get_best_creature_ever(get_index=True)
-        best_creature_position = best_creature.get_best_memory_position()
-        current_creature_best_position = self._array_creatures[creature_index].get_best_memory_position()
-        new_examplar = current_creature_best_position + (self._random.rand(self._number_dimensions) *
-                                                         (best_creature_position - current_creature_best_position))
-        return new_examplar
-
-    def create_new_examplar(self, creature_index, fitness_function):
+    def create_new_examplar_main_population(self, creature_index, fitness_function):
         total_evaluation = 0
 
         examplar_from_mixed_population_index = self.get_other_vector_examplar(creature_index)
@@ -298,48 +275,3 @@ class Swarm(object):
     def bitwise_AND(self, alpha, mask):
         divisor = int(alpha)/int(mask)
         return divisor % 2
-
-    def reset_swarm(self, fitness_function):
-        nmbr_evals = 0
-        best_creature, best_creature_index = self.get_best_creature_ever(get_index=True)
-        for creature_index in range(len(self._array_creatures)):
-            random_dimension = self._random.randint(0, self._number_dimensions)
-            if best_creature_index != creature_index:
-                # Reset its memory (i.e. his best position will be his current position
-                #  and best fitness current fitness).
-                nmbr_evals += self._array_creatures[
-                    creature_index].reset_memory(fitness_function=fitness_function,
-                                                 index_dimension_to_keep=random_dimension)
-            else:
-                nmbr_evals += self._array_creatures[
-                    creature_index].soft_reset_memory(fitness_function=fitness_function,
-                                                      index_dimension_to_keep=random_dimension)
-            # Give the creature a random velocity except in one dimension. In that dimension, it will keep its best
-            # position value.
-            self._array_creatures[creature_index].set_random_velocity_except_for_this_dimension(random_dimension)
-        return nmbr_evals
-
-    def get_array_positions(self):
-        list_position = []
-        for creature in self._array_creatures:
-            list_position.append(creature.get_position())
-        return np.array(list_position)
-
-    def add_creature_to_swarm(self, position, fitness=float('Inf')):
-        # Add a new examplar for this creature to the list of examplar
-        self._list_examplar_index.append(self.initialize_single_examplar(len(self._array_creatures)))
-
-        position = np.array(position)
-        # Calculate learning probability
-        # Because we are adding a creature to the swarm and because this operation should not happen often. We will
-        # simply assign a value randomly for the learning_probability between 0.05 and 0.55 (the range of value that
-        # creature could take during the initial creation of the swarm.
-        learning_probability = self._random.rand() * .5 + 0.05
-        self._array_creatures.append(Creature(learning_probability=learning_probability, random=self._random,
-                                              upper_bound=self._upper_bound, lower_bound=self._lower_bound,
-                                              position=position, fitness=fitness))
-        self._number_of_creatures += 1
-
-    def initialize_single_examplar(self, creature_index):
-        examplar = creature_index*np.ones(self._number_dimensions, dtype=int)
-        return examplar
