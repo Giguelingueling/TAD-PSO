@@ -76,8 +76,7 @@ class Swarm(object):
                 print "CURRENT GEN: ", current_gen
                 print "TOTAL EVALS: ", nmbr_evals
                 print repr(self.get_best_creature_ever().get_best_memory_fitness())
-            evals_done = self.update_swarm(nmbr_evals, max_evals, fitness_function,
-                                           use_fast_convergence_pso=use_fast_convergence_pso)
+            evals_done = self.update_swarm(nmbr_evals, max_evals, fitness_function)
             nmbr_evals += evals_done
             if nmbr_evals > max_evals:
                 break
@@ -89,12 +88,12 @@ class Swarm(object):
 
         return nmbr_evals, best_creature.get_best_memory_fitness(), best_creature.get_best_memory_position()
 
-    def update_swarm(self, current_number_evaluations, max_evals, fitness_function, use_fast_convergence_pso=False):
+    def update_swarm(self, current_number_evaluations, max_evals, fitness_function):
         # Check if we have to remove a creature from the orthogonal learning paradigm:
-        if (current_number_evaluations > ((len(self._array_index_creatures_to_ignore) + 1) * max_evals) / (
+        if (current_number_evaluations > ((len(self._array_index_creatures_to_ignore)) * max_evals) / (
                     self._number_of_creatures_main_population) and len(self._array_index_creatures_to_ignore) <=
-                self._number_of_creatures_main_population+1):
-            self.deactivate_creature(self._number_of_creatures_main_population)
+                self._number_of_creatures_main_population):
+            self.deactivate_creature(self._number_of_creatures_main_population-1)
             print "Array creatures desactivated : ", self._array_index_creatures_to_ignore
         total_evaluation = 0
         index = 0
@@ -104,8 +103,10 @@ class Swarm(object):
         for creature in self._array_creatures:
             if index not in self._array_index_creatures_to_ignore:
                 evals_to_give_creature = current_number_evaluations + total_evaluation
-                if index > self._number_of_creatures_main_population:
+                if index >= self._number_of_creatures_main_population:
                     use_fast_convergence_pso = True
+                else:
+                    use_fast_convergence_pso = False
                 # Check if the creature need a new examplar
                 if creature.need_new_examplar():
                     if use_fast_convergence_pso is False:
@@ -147,7 +148,7 @@ class Swarm(object):
 
     def get_other_vector_examplar(self, creature_index):
         examplar = np.zeros(self._number_dimensions)
-        possible_index = range(int(len(self._array_creatures)*.76))
+        possible_index = range(self._number_of_creatures_main_population)
         index_to_remove = np.copy(self._array_index_creatures_to_ignore).tolist()
         index_to_remove.append(creature_index)
         for index in sorted(index_to_remove, reverse=True):
@@ -159,7 +160,7 @@ class Swarm(object):
             # at the current dimension for the examplar.
             # Remove the current creature from the possible choice
             if len(possible_index) < 2:
-                possible_index = range(int(len(self._array_creatures)*.76), len(self._array_creatures))
+                possible_index = range(self._number_of_creatures_main_population, len(self._array_creatures))
             index_creature_chosen = np.random.choice(possible_index, 2, replace=False)
             if (self._array_creatures[index_creature_chosen[0]].get_best_memory_fitness() <
                     self._array_creatures[index_creature_chosen[1]].get_best_memory_fitness()):
